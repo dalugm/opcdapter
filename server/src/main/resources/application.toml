@@ -1,0 +1,30 @@
+[micronaut]
+application.name = "opcdapter"
+
+[micronaut.server]
+host = "${OPCDAPTER_HTTP_SERVER_HOST:127.0.0.1}"
+
+[grpc.server]
+host = "${OPCDAPTER_GRPC_SERVER_HOST:127.0.0.1}"
+port = "${OPCDAPTER_GRPC_SERVER_PORT:50051}"
+keep-alive-time = "10s"
+keep-alive-timeout = "5s"
+permit-keep-alive-time = "10s"
+permit-keep-alive-without-calls = true
+
+[opcda.write.dedup]
+# Skip when value equals the last successful write to the same point.
+enabled = "${OPCDAPTER_WRITE_DEDUP_ENABLED:false}"
+
+[opcda.dcom]
+# Thread count for the DCOM executor pool.
+threads = "${OPCDAPTER_DCOM_THREADS:16}"
+# Maximum number of application-submitted DCOM calls waiting behind active workers.
+queue-capacity = "${OPCDAPTER_DCOM_QUEUE_CAPACITY:64}"
+# Socket timeout for j-interop DCOM calls, in milliseconds.
+socket-timeout-ms = "${OPCDAPTER_DCOM_SOCKET_TIMEOUT_MS:5000}"
+
+# For non-loopback deployments, set OPCDAPTER_GRPC_AUTH_TOKEN. Clients must send
+# the same value in the x-opcdapter-token metadata header. Transport security
+# can additionally be enabled with Micronaut's grpc.server.ssl cert-chain and
+# private-key properties.

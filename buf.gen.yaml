@@ -1,0 +1,28 @@
+version: v2
+
+# Keep generator versions pinned. Update them only with matching runtime and
+# generated-code verification.
+
+plugins:
+  # protoc-gen-go
+  - remote: buf.build/protocolbuffers/go:v1.36.12
+    out: gen/go
+    opt:
+      - paths=source_relative
+
+  # protoc-gen-go-grpc
+  - remote: buf.build/grpc/go:v1.6.2
+    out: gen/go
+    opt:
+      - paths=source_relative
+
+  # protoc-gen-java
+  - remote: buf.build/protocolbuffers/java:v34.1
+    out: server/gen/java
+
+  # protoc-gen-java-grpc
+  - remote: buf.build/grpc/java:v1.82.2
+    out: server/gen/java
+
+inputs:
+  - directory: proto

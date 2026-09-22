@@ -1,0 +1,24 @@
+Thumbs.db
+.DS_Store
+.gradle
+
+logs/
+bin/
+build/
+target/
+out/
+.micronaut/
+
+.idea
+*.iml
+*.ipr
+*.iws
+.project
+.settings
+.classpath
+.factorypath
+
+java_pid*.hprof
+
+# `just docker` output
+*.tar

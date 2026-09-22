@@ -1,0 +1,251 @@
+syntax = "proto3";
+
+package opcda.v1;
+
+option go_package = "github.com/dalugm/opcdapter/gen/go/opcda/v1;opcdav1";
+option java_package = "com.dalugm.opcdapter.api.opcda.v1";
+option java_multiple_files = true;
+
+service OpcDaService {
+  rpc SetConnections(SetConnectionsRequest) returns (SetConnectionsResponse);
+  rpc Read(ReadRequest) returns (ReadResponse);
+  rpc Poll(PollRequest) returns (stream PollResponse);
+  rpc Write(WriteRequest) returns (WriteResponse);
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+}
+
+enum AdapterState {
+  ADAPTER_STATE_UNSPECIFIED = 0;
+  ADAPTER_STATE_HEALTHY = 1;
+  ADAPTER_STATE_DEGRADED = 2;
+  ADAPTER_STATE_DOWN = 3;
+}
+
+enum ConnectionState {
+  CONNECTION_STATE_UNSPECIFIED = 0;
+  CONNECTION_STATE_CONNECTED = 1;
+  CONNECTION_STATE_DISCONNECTED = 2;
+}
+
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+  ERROR_CODE_INVALID_ARGUMENT = 1;
+  ERROR_CODE_DEADLINE_EXCEEDED = 2;
+  ERROR_CODE_UNSUPPORTED_VALUE_TYPE = 3;
+  ERROR_CODE_OPC_FAILURE = 4;
+  ERROR_CODE_INTERNAL = 5;
+  ERROR_CODE_CONNECTION_NOT_FOUND = 6;
+  ERROR_CODE_ITEM_NOT_FOUND = 7;
+  ERROR_CODE_NO_VALUE = 8;
+}
+
+enum ReadSource {
+  READ_SOURCE_UNSPECIFIED = 0;
+  READ_SOURCE_CACHE = 1;
+  READ_SOURCE_DEVICE = 2;
+}
+
+enum WriteDisposition {
+  WRITE_DISPOSITION_UNSPECIFIED = 0;
+  WRITE_DISPOSITION_APPLIED = 1;
+  WRITE_DISPOSITION_SKIPPED = 2;
+  WRITE_DISPOSITION_FAILED = 3;
+}
+
+// A caller-defined OPC DA connection. id must be globally unique and stable;
+// host is a network address, not an identity.
+message Connection {
+  string id = 1;
+  string host = 2;
+  string domain = 3;
+  string username = 4;
+
+  oneof server_identifier {
+    string cls_id = 5;
+    string prog_id = 6;
+  }
+
+  ConnectionCredentials credentials = 7;
+  // Configures the OPC Group update rate and Poll stream cadence.
+  int64 poll_interval_ms = 8;
+}
+
+message ConnectionCredentials {
+  string password = 1;
+}
+
+// Replaces the complete desired connection set. Omitted connections are
+// removed. Validation is atomic: an invalid entry rejects the whole request.
+message SetConnectionsRequest {
+  string request_id = 1;
+  repeated Connection connections = 2;
+}
+
+message SetConnectionsResponse {
+  string request_id = 1;
+}
+
+message ErrorInfo {
+  ErrorCode code = 1;
+  string message = 2;
+  // Present only when the failure originated from an OPC HRESULT.
+  optional fixed32 hresult = 3;
+}
+
+// One point snapshot. Connection identity and collection timestamps live in
+// ConnectionDataBatch so they are not repeated for every point.
+message DataValue {
+  string item_id = 1;
+  // OPC DA server cache timestamp: effectively the point's last-change time.
+  int64 source_timestamp_ms = 2;
+  // Full OPC DA 16-bit Quality WORD stored in a uint32.
+  uint32 quality = 3;
+  // Set when the OPC value cannot be represented by the value oneof.
+  ErrorInfo error = 4;
+
+  oneof value {
+    bool bool_value = 10;
+    int32 int16_value = 11;
+    int32 int32_value = 12;
+    int64 int64_value = 13;
+    uint32 uint16_value = 14;
+    uint32 uint32_value = 15;
+    // Adapters that cannot represent VT_UI8 return ERROR_CODE_UNSUPPORTED_VALUE_TYPE.
+    uint64 uint64_value = 16;
+    float float_value = 17;
+    double double_value = 18;
+    string string_value = 19;
+    bytes bytes_value = 20;
+    int64 datetime_value = 21; // VT_DATE, epoch milliseconds
+  }
+}
+
+message ConnectionStatus {
+  string connection_id = 1;
+  string host = 2;
+  ConnectionState state = 3;
+  int64 last_success_ms = 4;
+}
+
+message GetStatusRequest {}
+
+// Domain status for the adapter and its OPC DA connections. This is not the
+// standard gRPC serving-status protocol.
+message GetStatusResponse {
+  AdapterState state = 1;
+  repeated ConnectionStatus connections = 2;
+}
+
+// Read performs one synchronous OPC DA read. CACHE reads the server-side OPC
+// cache; DEVICE requests a fresh device read from the OPC server.
+message ReadRequest {
+  // Caller-defined correlation identifier; it is not an idempotency key.
+  string request_id = 1;
+  string connection_id = 2;
+  repeated string item_ids = 3;
+  ReadSource source = 4;
+  // OPC operation budget. The effective deadline is the smaller of this
+  // value and the gRPC context deadline; zero selects the server default.
+  int64 timeout_ms = 5;
+}
+
+message ReadResponse {
+  string request_id = 1;
+  ConnectionDataBatch batch = 2;
+}
+
+// Poll reads one registered OPC DA connection for the lifetime of the stream.
+// To change its points, cancel the stream and create a new one. Each next poll
+// is scheduled after the previous poll finishes.
+message PollRequest {
+  // Caller-defined correlation identifier for logs and the initial PollAck.
+  string request_id = 1;
+  string connection_id = 2;
+  repeated string item_ids = 3;
+}
+
+message ItemValidationResult {
+  string item_id = 1;
+  // Absent when the item was accepted for polling.
+  ErrorInfo error = 2;
+}
+
+// On successful stream initialization, sent exactly once before any PollData.
+// Valid points continue polling even when other results contain errors; a
+// stream with no valid points then completes.
+message PollAck {
+  string request_id = 1;
+  repeated ItemValidationResult validations = 2;
+}
+
+message ConnectionDataBatch {
+  string connection_id = 1;
+  string host = 2;
+  int64 server_time_ms = 3;
+  int64 collected_at_ms = 4;
+  repeated DataValue values = 5;
+  // A connection read failure is reported instead of silently omitted.
+  ErrorInfo error = 6;
+}
+
+// sequence is monotonically increasing per stream. Slow clients may observe
+// gaps when poll results are coalesced.
+message PollData {
+  uint64 sequence = 1;
+  ConnectionDataBatch batch = 2;
+}
+
+message PollResponse {
+  oneof payload {
+    PollAck ack = 1;
+    PollData data = 2;
+  }
+}
+
+message WriteTarget {
+  string connection_id = 1;
+  string item_id = 2;
+
+  oneof value {
+    bool bool_value = 10;
+    int32 int16_value = 11;
+    int32 int32_value = 12;
+    int64 int64_value = 13;
+    uint32 uint16_value = 14;
+    uint32 uint32_value = 15;
+    uint64 uint64_value = 16;
+    float float_value = 17;
+    double double_value = 18;
+    string string_value = 19;
+    bytes bytes_value = 20;
+    int64 datetime_value = 21; // VT_DATE, epoch milliseconds
+  }
+}
+
+message WriteRequest {
+  // Caller-defined correlation identifier; it is not an idempotency key.
+  string request_id = 1;
+  // OPC operation budget. The gRPC context deadline should be slightly longer
+  // when the caller needs structured per-target timeout results.
+  int64 timeout_ms = 2;
+  // Every connection_id must be registered through SetConnections.
+  repeated WriteTarget targets = 3;
+}
+
+message PointWriteResult {
+  uint32 target_index = 1;
+  string connection_id = 2;
+  string item_id = 3;
+  WriteDisposition disposition = 4;
+  int64 completed_at_ms = 5;
+  // Present exactly when disposition is FAILED.
+  ErrorInfo error = 6;
+}
+
+message WriteResponse {
+  string request_id = 1;
+  // Contains exactly one result for every request target. target_index maps
+  // each result back to its original request position.
+  repeated PointWriteResult results = 2;
+  int64 completed_at_ms = 3;
+}
