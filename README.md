@@ -47,11 +47,11 @@ Build an offline-loadable Linux/amd64 image:
 
 ```bash
 just docker
-docker load -i opcdapter-v0.1.0.tar
+docker load -i opcdapter-v0.5.1.tar
 docker run -d --name opcdapter \
   -p 127.0.0.1:50051:50051 \
   -v opcdapter-logs:/app/logs \
-  opcdapter:v0.1.0
+  opcdapter:v0.5.1
 ```
 
 Set `OPCDAPTER_IMAGE` when publishing to a registry, for example

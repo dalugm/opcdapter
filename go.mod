@@ -2,6 +2,9 @@ module github.com/dalugm/opcdapter
 
 go 1.27.1
 
+// Accidentally published with the former internal module path.
+retract v0.5.0
+
 require (
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12

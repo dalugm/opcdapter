@@ -6,7 +6,7 @@ plugins {
     id("io.github.ben-manes.versions") version "0.64.0"
 }
 
-version = "0.1.0"
+version = "0.5.1"
 group = "com.dalugm.opcdapter"
 
 repositories {
